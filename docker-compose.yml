@@ -46,8 +46,10 @@ services:
       context: ./back_go
     container_name: brandymanager_go
     environment:
+      APP_ENV: ${APP_ENV:-local}
       PORT: ${GO_PORT:-8080}
       DJANGO_API_BASE_URL: ${DJANGO_API_BASE_URL:-http://back_django:8000}
+      AUTH_MODE: ${GO_AUTH_MODE:-passthrough}
     ports:
       - "${GO_PORT:-8080}:${GO_PORT:-8080}"
     depends_on:
