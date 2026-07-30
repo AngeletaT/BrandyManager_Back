@@ -37,7 +37,7 @@ func TestHealthDoesNotRequireAuthentication(t *testing.T) {
 
 func TestAPIV1RequiresDjangoBearerToken(t *testing.T) {
 	router := NewRouter(testConfig())
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/modules", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/modules", nil)
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
@@ -49,7 +49,7 @@ func TestAPIV1RequiresDjangoBearerToken(t *testing.T) {
 
 func TestModulesReturnsOperationalDomains(t *testing.T) {
 	router := NewRouter(testConfig())
-	request := authenticatedRequest(http.MethodGet, "/api/v1/modules", nil)
+	request := authenticatedRequest(http.MethodGet, "/api/modules", nil)
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
@@ -78,7 +78,7 @@ func TestModulesReturnsOperationalDomains(t *testing.T) {
 func TestQueuePlaybackCommandAcceptsValidCommand(t *testing.T) {
 	router := NewRouter(testConfig())
 	payload := []byte(`{"zone_id":"zone-1","command_type":"pause"}`)
-	request := authenticatedRequest(http.MethodPost, "/api/v1/playback/commands", bytes.NewReader(payload))
+	request := authenticatedRequest(http.MethodPost, "/api/playback/commands", bytes.NewReader(payload))
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
@@ -91,7 +91,7 @@ func TestQueuePlaybackCommandAcceptsValidCommand(t *testing.T) {
 func TestQueuePlaybackCommandRejectsInvalidCommand(t *testing.T) {
 	router := NewRouter(testConfig())
 	payload := []byte(`{"zone_id":"zone-1","command_type":"unknown"}`)
-	request := authenticatedRequest(http.MethodPost, "/api/v1/playback/commands", bytes.NewReader(payload))
+	request := authenticatedRequest(http.MethodPost, "/api/playback/commands", bytes.NewReader(payload))
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)

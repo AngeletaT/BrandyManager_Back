@@ -67,7 +67,7 @@ back_go/
 
 ## Backend Go
 
-El backend Go queda como API operativa. Django sigue gestionando autenticacion, usuarios, permisos y administracion interna. Go recibira el JWT emitido por Django en las rutas `/api/v1`.
+El backend Go queda como API operativa. Django sigue gestionando autenticacion, usuarios, permisos y administracion interna. Go recibira el JWT emitido por Django en las rutas `/api`.
 
 Responsabilidades iniciales de Go:
 
@@ -85,10 +85,10 @@ GET /health
 Endpoints iniciales protegidos con `Authorization: Bearer <token>`:
 
 ```http
-GET /api/v1/system
-GET /api/v1/modules
-GET /api/v1/modules/{module}/status
-POST /api/v1/playback/commands
+GET /api/system
+GET /api/modules
+GET /api/modules/{module}/status
+POST /api/playback/commands
 ```
 
 El modo actual de autenticacion en Go es `passthrough`: exige que llegue un Bearer token de Django y deja preparada la capa para validar o introspectar el token en una iteracion posterior.

@@ -22,13 +22,13 @@ func NewRouter(cfg config.Config) http.Handler {
 	root := http.NewServeMux()
 	root.HandleFunc("GET /health", handler.health)
 
-	apiV1 := http.NewServeMux()
-	apiV1.HandleFunc("GET /api/v1/system", handler.system)
-	apiV1.HandleFunc("GET /api/v1/modules", handler.modules)
-	apiV1.HandleFunc("GET /api/v1/modules/{module}/status", handler.moduleStatus)
-	apiV1.HandleFunc("POST /api/v1/playback/commands", handler.queuePlaybackCommand)
+	api := http.NewServeMux()
+	api.HandleFunc("GET /api/system", handler.system)
+	api.HandleFunc("GET /api/modules", handler.modules)
+	api.HandleFunc("GET /api/modules/{module}/status", handler.moduleStatus)
+	api.HandleFunc("POST /api/playback/commands", handler.queuePlaybackCommand)
 
-	root.Handle("/api/v1/", middleware.DjangoJWT(cfg.AuthMode)(apiV1))
+	root.Handle("/api/", middleware.DjangoJWT(cfg.AuthMode)(api))
 
 	return requestid.Middleware(middleware.Recover(root))
 }
