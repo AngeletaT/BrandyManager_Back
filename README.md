@@ -48,10 +48,7 @@ docker compose exec backend python manage.py test
 
 ## Usuarios y autenticacion
 
-Los usuarios tienen dos roles:
-
-- `admin`: administrador, alta manual desde admin o shell.
-- `client`: cliente, rol asignado siempre en el registro publico.
+El usuario se identifica por email y no depende de `username`. Los accesos se resuelven mediante roles internos de plataforma, membresias de empresa, permisos y ambitos.
 
 ### Registro
 
@@ -66,9 +63,7 @@ Body:
   "email": "client@example.com",
   "password": "StrongPass123!",
   "first_name": "Client",
-  "last_name": "Example",
-  "phone": "+34000000000",
-  "company_name": "Example Company"
+  "last_name": "Example"
 }
 ```
 
@@ -79,12 +74,8 @@ Respuesta:
   "user": {
     "id": 1,
     "email": "client@example.com",
-    "username": "client@example.com",
     "first_name": "Client",
     "last_name": "Example",
-    "role": "client",
-    "phone": "+34000000000",
-    "company_name": "Example Company",
     "created_at": "2026-07-08T18:44:00Z"
   },
   "tokens": {

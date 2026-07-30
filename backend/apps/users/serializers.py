@@ -10,12 +10,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "email",
-            "username",
             "first_name",
             "last_name",
-            "role",
-            "phone",
-            "company_name",
             "created_at",
         ]
         read_only_fields = fields
@@ -26,8 +22,6 @@ class UserRegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
     first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
-    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
-    company_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
     def validate_password(self, value):
         validate_password(value)
