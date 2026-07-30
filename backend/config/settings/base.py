@@ -27,6 +27,17 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "apps.users",
+    "apps.organizations",
+    "apps.authorization",
+    "apps.billing",
+    "apps.catalog",
+    "apps.playlists",
+    "apps.scheduling",
+    "apps.campaigns",
+    "apps.devices",
+    "apps.playback",
+    "apps.audit",
+    "apps.support",
 ]
 
 MIDDLEWARE = [
