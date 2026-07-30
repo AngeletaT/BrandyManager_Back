@@ -11,6 +11,7 @@ type Config struct {
 	Port              string
 	DjangoAPIBaseURL  string
 	AuthMode          string
+	FrontendOrigins   string
 	ReadHeaderTimeout time.Duration
 }
 
@@ -21,6 +22,7 @@ func Load() Config {
 		Port:              env("PORT", "8080"),
 		DjangoAPIBaseURL:  env("DJANGO_API_BASE_URL", "http://back_django:8000"),
 		AuthMode:          env("AUTH_MODE", "passthrough"),
+		FrontendOrigins:   env("FRONTEND_ORIGINS", "http://localhost:5173"),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 }

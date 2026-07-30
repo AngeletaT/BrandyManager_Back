@@ -22,6 +22,7 @@ Servicios:
 
 - Backend Django: http://localhost:8000
 - Backend Go: http://localhost:8080
+- Front React: http://localhost:5173
 - PostgreSQL: localhost:5432
 
 El contenedor `back_django` ejecuta automaticamente las migraciones antes de arrancar el servidor.

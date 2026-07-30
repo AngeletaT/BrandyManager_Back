@@ -19,6 +19,7 @@ func testConfig() config.Config {
 		Port:              "0",
 		DjangoAPIBaseURL:  "http://back_django:8000",
 		AuthMode:          "passthrough",
+		FrontendOrigins:   "http://localhost:5173",
 		ReadHeaderTimeout: time.Second,
 	}
 }
@@ -35,7 +36,7 @@ func TestHealthDoesNotRequireAuthentication(t *testing.T) {
 	}
 }
 
-func TestAPIV1RequiresDjangoBearerToken(t *testing.T) {
+func TestAPIRequiresDjangoBearerToken(t *testing.T) {
 	router := NewRouter(testConfig())
 	request := httptest.NewRequest(http.MethodGet, "/api/modules", nil)
 	response := httptest.NewRecorder()
@@ -44,6 +45,23 @@ func TestAPIV1RequiresDjangoBearerToken(t *testing.T) {
 
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, response.Code)
+	}
+}
+
+func TestCORSPreflightAllowsFrontendOrigin(t *testing.T) {
+	router := NewRouter(testConfig())
+	request := httptest.NewRequest(http.MethodOptions, "/api/modules", nil)
+	request.Header.Set("Origin", "http://localhost:5173")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, response.Code)
+	}
+	if response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
+		t.Fatalf("expected frontend origin to be allowed")
 	}
 }
 

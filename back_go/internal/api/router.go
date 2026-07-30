@@ -30,5 +30,5 @@ func NewRouter(cfg config.Config) http.Handler {
 
 	root.Handle("/api/", middleware.DjangoJWT(cfg.AuthMode)(api))
 
-	return requestid.Middleware(middleware.Recover(root))
+	return requestid.Middleware(middleware.CORS(cfg.FrontendOrigins)(middleware.Recover(root)))
 }
