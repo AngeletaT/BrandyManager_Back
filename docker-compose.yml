@@ -74,6 +74,17 @@ services:
       - back_django
       - back_go
 
+  db_admin:
+    image: adminer:4
+    container_name: brandymanager_db_admin
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "${DB_ADMIN_PORT:-8081}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   front_node_modules:
