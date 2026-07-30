@@ -18,10 +18,10 @@ services:
       timeout: 5s
       retries: 10
 
-  backend:
+  back_django:
     build:
-      context: .
-    container_name: brandymanager_backend
+      context: ./back_django
+    container_name: brandymanager_django
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.local
@@ -36,10 +36,22 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./back_django/backend:/app
     depends_on:
       db:
         condition: service_healthy
+
+  back_go:
+    build:
+      context: ./back_go
+    container_name: brandymanager_go
+    environment:
+      PORT: ${GO_PORT:-8080}
+      DJANGO_API_BASE_URL: ${DJANGO_API_BASE_URL:-http://back_django:8000}
+    ports:
+      - "${GO_PORT:-8080}:${GO_PORT:-8080}"
+    depends_on:
+      - back_django
 
 volumes:
   postgres_data:

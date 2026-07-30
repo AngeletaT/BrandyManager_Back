@@ -1,6 +1,9 @@
 # brandyManager Backend
 
-Backend inicial en Django REST Framework con PostgreSQL levantado mediante Docker Compose.
+Backends de brandyManager levantados mediante Docker Compose:
+
+- `back_django`: API principal en Django REST Framework con PostgreSQL.
+- `back_go`: servicio Go preparado como base para el motor de reproduccion.
 
 ## Requisitos
 
@@ -18,9 +21,10 @@ docker compose up --build
 Servicios:
 
 - Backend Django: http://localhost:8000
+- Backend Go: http://localhost:8080
 - PostgreSQL: localhost:5432
 
-El contenedor `backend` ejecuta automaticamente las migraciones antes de arrancar el servidor.
+El contenedor `back_django` ejecuta automaticamente las migraciones antes de arrancar el servidor.
 
 ## Variables de entorno
 
@@ -36,14 +40,38 @@ Valores por defecto para desarrollo:
 - Usuario: `brandymanager`
 - Password: `brandymanager`
 - Host interno desde Django: `db`
+- URL interna de Django desde Go: `http://back_django:8000`
 
 ## Comandos utiles
 
 ```bash
 docker compose up --build
 docker compose down
-docker compose exec backend python manage.py createsuperuser
-docker compose exec backend python manage.py test
+docker compose exec back_django python manage.py createsuperuser
+docker compose exec back_django python manage.py test
+```
+
+## Estructura
+
+```text
+back_django/
+  backend/
+  requirements/
+  Dockerfile
+
+back_go/
+  cmd/server/
+  Dockerfile
+  go.mod
+```
+
+## Backend Go
+
+Endpoints iniciales:
+
+```http
+GET /health
+GET /api/player/status
 ```
 
 ## Usuarios y autenticacion
@@ -72,7 +100,7 @@ Respuesta:
 ```json
 {
   "user": {
-    "id": 1,
+    "id": "2f3b2f9f-7a21-4b4a-9e4f-6c0e8f4b9132",
     "email": "client@example.com",
     "first_name": "Client",
     "last_name": "Example",
