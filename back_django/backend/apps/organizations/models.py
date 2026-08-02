@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.organizations.normalization import normalize_country_code, normalize_tax_id
 from shared.db.models import TimeStampedUUIDModel, UUIDModel, validate_date_range
 
 
@@ -26,6 +27,9 @@ class Company(TimeStampedUUIDModel):
     archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["tax_id"], name="uniq_company_tax_id"),
+        ]
         indexes = [
             models.Index(fields=["status"]),
             models.Index(fields=["tax_id"]),
@@ -36,6 +40,11 @@ class Company(TimeStampedUUIDModel):
 
     def __str__(self):
         return self.trade_name or self.legal_name
+
+    def save(self, *args, **kwargs):
+        self.tax_id = normalize_tax_id(self.tax_id)
+        self.country_code = normalize_country_code(self.country_code)
+        super().save(*args, **kwargs)
 
 
 class CompanyMembership(TimeStampedUUIDModel):
@@ -56,6 +65,7 @@ class CompanyMembership(TimeStampedUUIDModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["company", "user"], name="uniq_company_membership_user"),
+            models.UniqueConstraint(fields=["user"], name="uniq_company_membership_single_company_per_user"),
         ]
         indexes = [
             models.Index(fields=["company", "status"]),
@@ -63,6 +73,15 @@ class CompanyMembership(TimeStampedUUIDModel):
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.user_id:
+            existing_membership = CompanyMembership.objects.filter(user_id=self.user_id)
+            if self.pk:
+                existing_membership = existing_membership.exclude(pk=self.pk)
+            if existing_membership.exists():
+                raise ValidationError({"user": "Un usuario cliente solo puede pertenecer a una empresa."})
 
 
 class OrganizationalUnit(TimeStampedUUIDModel):

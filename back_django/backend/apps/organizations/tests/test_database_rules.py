@@ -37,12 +37,12 @@ class DatabaseRuleTests(TestCase):
             with transaction.atomic():
                 callback()
 
-    def test_user_can_belong_to_multiple_companies(self):
+    def test_user_cannot_belong_to_multiple_companies(self):
         first = f.membership(self.company, self.user)
-        second = f.membership(self.other_company, self.user)
 
-        self.assertNotEqual(first.company_id, second.company_id)
-        self.assertEqual(self.user.company_memberships.count(), 2)
+        self.assert_invalid(lambda: f.membership(self.other_company, self.user))
+        self.assertEqual(first.company_id, self.company.id)
+        self.assertEqual(self.user.company_memberships.count(), 1)
 
     def test_membership_cannot_receive_custom_role_from_another_company(self):
         membership = f.membership(self.company, self.user)
