@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from shared.db.models import TimeStampedUUIDModel, UUIDModel
 
@@ -45,8 +46,11 @@ class Subscription(TimeStampedUUIDModel):
     started_at = models.DateTimeField(db_index=True)
     current_period_start = models.DateTimeField()
     current_period_end = models.DateTimeField(db_index=True)
+    trial_started_at = models.DateTimeField(null=True, blank=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
     renews_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    blocked_reason = models.CharField(max_length=120, blank=True)
     license_quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=3)
@@ -60,9 +64,41 @@ class Subscription(TimeStampedUUIDModel):
         indexes = [
             models.Index(fields=["company", "status"]),
             models.Index(fields=["current_period_end"]),
+            models.Index(fields=["trial_ends_at"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
+
+    def trial_has_expired(self, *, at=None):
+        at = at or timezone.now()
+        return self.status == self.Status.TRIAL and self.trial_ends_at and self.trial_ends_at <= at
+
+    def has_functional_access(self, *, at=None):
+        at = at or timezone.now()
+        if self.status == self.Status.ACTIVE:
+            return True
+        if self.status == self.Status.TRIAL:
+            return bool(self.trial_ends_at and self.trial_ends_at > at)
+        return False
+
+    def access_block_reason(self, *, at=None):
+        at = at or timezone.now()
+        if self.has_functional_access(at=at):
+            return ""
+        if self.blocked_reason:
+            return self.blocked_reason
+        if self.status == self.Status.TRIAL and self.trial_ends_at and self.trial_ends_at <= at:
+            return "trial_expired"
+        return self.status.lower()
+
+    def effective_limits(self):
+        if self.plan_snapshot.get("limits"):
+            return self.plan_snapshot["limits"]
+        if self.plan_snapshot.get("features", {}).get("limits"):
+            return self.plan_snapshot["features"]["limits"]
+        if self.plan_id and self.plan.features.get("limits"):
+            return self.plan.features["limits"]
+        return {}
 
 
 class License(TimeStampedUUIDModel):
