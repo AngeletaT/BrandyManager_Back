@@ -1090,3 +1090,236 @@ Este backend debe crecer como una **API Django modular por dominios**.
 Cada dominio debe poder entenderse, testearse y evolucionar de forma aislada.
 
 La arquitectura debe ser simple al principio, pero lo bastante ordenada para que, si una parte del sistema crece mucho, pueda separarse en el futuro con menos fricción.
+
+---
+
+# Integración obligatoria con BrandyManager Front
+
+## Objetivo común
+
+`BrandyManager_Back` y el repositorio hermano `../BrandyManager_Front` forman una
+sola aplicación. El objetivo de la implementación es sustituir todos los datos y
+procesos simulados del frontend por APIs reales, persistencia en PostgreSQL y los
+servicios operativos necesarios hasta que el producto funcione de extremo a
+extremo.
+
+No se deben crear endpoints que solo devuelvan datos ficticios para imitar
+`mockApi`. Cada endpoint nuevo debe ejecutar el caso de uso real, aplicar
+permisos, persistir o consultar datos reales y disponer de pruebas.
+
+El `docker-compose.yml` de este repositorio es la única entrada local para
+PostgreSQL, Django, Go y el frontend React. El frontend continúa siendo un
+repositorio hermano independiente; no copiarlo dentro del backend ni crear otra
+historia Git.
+
+## Reparto de responsabilidades
+
+### Django
+
+Django REST Framework es responsable de:
+
+- autenticación y ciclo de vida de la sesión;
+- usuarios globales y pertenencias a cuentas;
+- cuentas empresariales, empresas, sedes y zonas;
+- invitaciones y permisos de trabajadores;
+- catálogo y metadatos musicales;
+- definición de playlists y reglas administrativas de programación;
+- pruebas, planes, suscripciones y facturación;
+- formularios de demo y contacto, con persistencia y aviso por correo;
+- soporte, certificados y administración interna;
+- auditoría y coordinación persistente con los procesos operativos.
+
+### Go
+
+Go es responsable de:
+
+- ejecución operativa de canales y programación;
+- dispositivos, registro, heartbeat y telemetría;
+- reproducción y streaming de audio;
+- cola efectiva, transiciones, fallback y estado de “ahora suena”;
+- eventos de reproducción e incidencias operativas;
+- procesos de baja latencia y comunicación con reproductores.
+
+Django conserva la autoridad sobre identidad, cuenta, permisos y configuración
+persistente. Go debe validar la identidad/autorización mediante el mecanismo
+acordado y nunca confiar en un `account_id` enviado libremente por el cliente.
+Cuando un flujo cruce ambos servicios, definir explícitamente quién es la fuente
+de verdad, cómo se sincroniza y qué ocurre ante reintentos o fallos parciales.
+
+## Reglas de identidad y aislamiento
+
+Hay dos niveles de rol:
+
+1. Rol global:
+   - `admin`: solo propietarios o trabajadores internos de BrandyManager,
+     creados manualmente.
+   - `client`: todo usuario registrado públicamente.
+2. Rol de pertenencia a la cuenta:
+   - `owner`
+   - `manager`
+   - `editor_playlists`
+   - `operador_sedes`
+   - `viewer`
+
+Reglas innegociables:
+
+- El registro público siempre fuerza `client` en el servidor.
+- Ningún payload público puede crear o promover a `admin`.
+- Cada usuario cliente pertenece exclusivamente a una cuenta empresarial.
+- El primer cliente que completa el alta de una empresa recibe `owner`.
+- Un `owner` puede invitar trabajadores y asignar únicamente roles internos.
+- Toda consulta y mutación debe aislar los datos por la cuenta obtenida de la
+  sesión, no por identificadores confiados al navegador.
+- Los endpoints internos requieren `admin` global y deben auditar las acciones
+  sensibles.
+
+## Prueba y planes
+
+- El registro es autoservicio.
+- La prueba inicial dura 7 días y no exige tarjeta.
+- Los planes oficiales son `Básico`, `Estándar` y `Premium`.
+- Sus prestaciones y límites iniciales son provisionales; modelarlos de forma
+  centralizada y configurable para poder modificarlos sin reescribir dominios:
+
+| Capacidad | Básico | Estándar | Premium |
+| --- | ---: | ---: | ---: |
+| Empresas gestionadas | 1 | 3 | 10 |
+| Sedes | 2 | 10 | 50 |
+| Zonas | 4 | 30 | 150 |
+| Canales | 1 | 6 | 25 |
+| Dispositivos | 4 | 30 | 150 |
+| Usuarios | 3 | 10 | 30 |
+| Playlists | 10 | 50 | Sin límite práctico |
+| Analíticas | Resumen básico | Informes completos | Informes avanzados y exportación |
+| Soporte | Email | Prioritario | Prioritario con gestor de cuenta |
+
+- La prueba de 7 días usa provisionalmente las capacidades del plan
+  `Estándar`.
+- Una prueba caducada conserva datos e inicio de sesión, pero bloquea las
+  funciones del producto salvo contratación, consulta de cuenta y cierre de
+  sesión.
+- Los límites se aplican en servicios del backend y se prueban; no confiar en
+  botones deshabilitados del frontend.
+- La plataforma de pago real se integrará en modo de pruebas durante la fase 5.
+
+## Fases obligatorias de implementación
+
+### Fase 1: autenticación, cuenta actual y protección de rutas
+
+Implementar y cerrar completamente:
+
+- registro público seguro como `client`;
+- verificación y reenvío de correo;
+- login, refresh, logout e invalidación de sesión;
+- recuperación y cambio de contraseña con tokens de un solo uso;
+- endpoint de usuario/cuenta actual;
+- creación transaccional de cuenta, empresa y pertenencia `owner` al completar
+  el alta;
+- prueba automática de 7 días;
+- estados de onboarding, prueba y acceso;
+- permisos diferenciados para `/app` y `/admin`;
+- contratos de error estables y tests de aislamiento/escalada de privilegios.
+
+Al finalizar, eliminar del frontend los mocks de estos flujos y las credenciales
+de demostración. No se considera completa si las rutas siguen accesibles sin una
+sesión válida.
+
+### Fase 2: empresas, sedes, zonas y usuarios
+
+Implementar modelos, constraints, selectors, services, endpoints y permisos
+para:
+
+- empresas de la cuenta;
+- sedes y zonas con sus relaciones;
+- listado, creación, edición y desactivación/borrado según reglas de integridad;
+- miembros, invitaciones, aceptación y roles internos;
+- filtros y paginación desde servidor;
+- límites del plan y aislamiento estricto por cuenta.
+
+Al finalizar, el frontend no debe usar IDs fijos como `acc-1` o `co-1` ni
+descargar datos de otras cuentas para filtrarlos en el navegador.
+
+### Fase 3: catálogo, playlists y programación
+
+Implementar:
+
+- catálogo real administrado exclusivamente por BrandyManager;
+- metadatos, publicación, retirada y procesamiento de pistas;
+- consulta del catálogo por clientes sin subida de canciones;
+- CRUD y duplicado de playlists, orden y pertenencia de pistas;
+- programación, recurrencia, prioridad, solapamientos y fallback;
+- permisos por rol y límites de plan;
+- contrato Django-Go para entregar la configuración operativa.
+
+Al finalizar, eliminar los seeds y almacenes mutables de catálogo, playlists y
+programación consumidos por React.
+
+### Fase 4: canales, dispositivos y reproducción
+
+Implementar conjuntamente con Go:
+
+- canales y su configuración persistente;
+- asignación de zonas, playlists de reserva y programación efectiva;
+- registro seguro de dispositivos mediante códigos de un solo uso;
+- heartbeat, estado, incidencias, logs y comandos idempotentes;
+- reproducción y streaming de audio reales;
+- “ahora suena”, siguiente pista, historial y eventos de reproducción;
+- funcionamiento real de `/reproductor/$deviceId` con autorización adecuada;
+- recuperación ante desconexión y ausencia de programación.
+
+No marcar esta fase como completa con temporizadores, estados inventados o un
+archivo de audio fijo que ignore canal y programación.
+
+### Fase 5: analíticas, certificados, facturación, soporte y administración
+
+Implementar:
+
+- agregaciones y filtros de analíticas sobre eventos reales;
+- historial paginado y exportaciones que se acuerden;
+- certificados de servicio y verificación pública por código;
+- planes, suscripciones, facturas y proveedor de pagos real en modo de pruebas;
+- soporte, mensajes, estados e incidencias;
+- formularios de demo y contacto persistidos con aviso por correo;
+- panel interno de cuentas, catálogo, dispositivos, auditoría y estado;
+- permisos internos, impersonación segura si se aprueba y trazabilidad completa.
+
+Al finalizar la fase 5 no debe quedar ningún consumidor de `mockApi`, ningún
+seed de producto en ejecución ni ninguna pantalla que confirme operaciones no
+persistidas.
+
+## Contrato con el frontend
+
+Antes de implementar cada bloque:
+
+1. Inspeccionar los tipos, formularios y estados de la pantalla correspondiente
+   en `../BrandyManager_Front`.
+2. Definir método, ruta, autenticación, permisos, query params, payload,
+   respuesta, paginación y errores.
+3. Acordar qué servicio es la fuente de verdad si intervienen Django y Go.
+4. Implementar migraciones, services/selectors, serializers, endpoints y tests.
+5. Conectar React mediante TanStack Query.
+6. Eliminar solamente los mocks de ese dominio cuando ya no tengan consumidores.
+7. Verificar el flujo completo desde la interfaz hasta PostgreSQL o el motor Go.
+
+Usar ISO 8601 para fechas y horas, IDs opacos y enums documentados. Los listados
+que puedan crecer deben paginarse y aceptar filtros de servidor. Mantener un
+formato de error estable con código legible por máquina, mensaje seguro y
+errores de campo cuando corresponda.
+
+## Criterio de finalización de una fase
+
+Una fase solo está terminada cuando:
+
+- el flujo funciona desde React contra servicios reales;
+- los datos sobreviven a reinicios;
+- la autorización y el aislamiento multiempresa están probados;
+- las migraciones están creadas y revisadas;
+- Django y Go tienen tests proporcionales al riesgo;
+- CORS y autenticación funcionan desde el origen del frontend;
+- los mocks sustituidos se han eliminado, no se usan como fallback;
+- los estados de carga, error, vacío y éxito funcionan en la interfaz;
+- `Django check`, tests de Django, `go test ./...` y `bun run build` pasan;
+- el Compose completo arranca y sus comprobaciones de salud son correctas.
+
+No iniciar la fase siguiente dejando contratos provisionales, rutas sin proteger
+o persistencia simulada en la fase actual.
