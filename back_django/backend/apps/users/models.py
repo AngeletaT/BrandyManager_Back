@@ -44,6 +44,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     mfa_enabled = models.BooleanField(default=False)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     date_joined = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -59,6 +60,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         indexes = [
             models.Index(fields=["email"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["email_verified_at"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
@@ -69,3 +71,43 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class UserActionToken(models.Model):
+    class Purpose(models.TextChoices):
+        VERIFY_EMAIL = "VERIFY_EMAIL", "Verify email"
+        RESET_PASSWORD = "RESET_PASSWORD", "Reset password"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="action_tokens")
+    purpose = models.CharField(max_length=30, choices=Purpose.choices, db_index=True)
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    revoked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "purpose", "expires_at"]),
+            models.Index(fields=["purpose", "expires_at"]),
+            models.Index(fields=["created_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "purpose"],
+                condition=models.Q(consumed_at__isnull=True, revoked_at__isnull=True),
+                name="uniq_active_user_action_token_purpose",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.purpose}"
+
+    def is_expired(self, *, at=None):
+        at = at or timezone.now()
+        return self.expires_at <= at
+
+    def is_valid(self, *, at=None):
+        return not self.consumed_at and not self.revoked_at and not self.is_expired(at=at)

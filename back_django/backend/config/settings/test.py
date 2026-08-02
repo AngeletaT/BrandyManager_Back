@@ -7,3 +7,6 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+FRONTEND_BASE_URL = "http://localhost:5173"

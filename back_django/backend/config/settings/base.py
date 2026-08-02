@@ -24,6 +24,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:5173").rstrip("/")
 
 INSTALLED_APPS = [
     "corsheaders",
@@ -35,10 +36,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "apps.users",
     "apps.organizations",
     "apps.authorization",
     "apps.billing",
+    "apps.onboarding",
     "apps.catalog",
     "apps.playlists",
     "apps.scheduling",
@@ -130,10 +133,28 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.FormParser",
         "rest_framework.parsers.MultiPartParser",
     ],
+    "EXCEPTION_HANDLER": "shared.api.exceptions.custom_exception_handler",
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "CHECK_REVOKE_TOKEN": True,
 }
+
+BM_REFRESH_COOKIE_NAME = os.environ.get("BM_REFRESH_COOKIE_NAME", "bm_refresh")
+BM_REFRESH_COOKIE_HTTP_ONLY = True
+BM_REFRESH_COOKIE_SECURE = os.environ.get("BM_REFRESH_COOKIE_SECURE", str(not DEBUG)).lower() in {"1", "true", "yes", "on"}
+BM_REFRESH_COOKIE_SAMESITE = os.environ.get("BM_REFRESH_COOKIE_SAMESITE", "Lax")
+BM_REFRESH_COOKIE_PATH = os.environ.get("BM_REFRESH_COOKIE_PATH", "/api/users/")
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "BrandyManager <no-reply@brandymanager.local>")
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
