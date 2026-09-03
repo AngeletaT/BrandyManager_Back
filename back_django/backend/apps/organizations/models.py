@@ -84,6 +84,46 @@ class CompanyMembership(TimeStampedUUIDModel):
                 raise ValidationError({"user": "Un usuario cliente solo puede pertenecer a una empresa."})
 
 
+class CompanyInvitation(TimeStampedUUIDModel):
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="invitations")
+    invited_email = models.EmailField(db_index=True)
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
+    role = models.ForeignKey("authorization.CompanyRole", on_delete=models.PROTECT, related_name="company_invitations")
+    invited_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="sent_company_invitation_tokens")
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    accepted_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="accepted_company_invitations")
+    accepted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    site_ids = models.JSONField(default=list, blank=True)
+    zone_ids = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "invited_email"]),
+            models.Index(fields=["company", "created_at"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "invited_email"],
+                condition=models.Q(accepted_at__isnull=True, cancelled_at__isnull=True),
+                name="uniq_active_company_invitation_email",
+            ),
+        ]
+
+    def is_expired(self, *, at=None):
+        from django.utils import timezone
+
+        at = at or timezone.now()
+        return self.expires_at <= at
+
+    def is_pending(self, *, at=None):
+        return not self.accepted_at and not self.cancelled_at and not self.is_expired(at=at)
+
+
 class OrganizationalUnit(TimeStampedUUIDModel):
     class UnitType(models.TextChoices):
         BRAND = "BRAND", "Brand"
@@ -134,10 +174,18 @@ class Site(TimeStampedUUIDModel):
         TEMPORARILY_CLOSED = "TEMPORARILY_CLOSED", "Temporarily closed"
         ARCHIVED = "ARCHIVED", "Archived"
 
+    class SiteType(models.TextChoices):
+        BRANCH = "BRANCH", "Branch"
+        FRANCHISE = "FRANCHISE", "Franchise"
+        STORE = "STORE", "Store"
+        OFFICE = "OFFICE", "Office"
+        OTHER = "OTHER", "Other"
+
     company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="sites")
     organizational_unit = models.ForeignKey(OrganizationalUnit, on_delete=models.SET_NULL, null=True, blank=True, related_name="sites")
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=64)
+    site_type = models.CharField(max_length=20, choices=SiteType.choices, default=SiteType.BRANCH, db_index=True)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.ACTIVE, db_index=True)
     address_line_1 = models.CharField(max_length=255)
@@ -159,6 +207,7 @@ class Site(TimeStampedUUIDModel):
         ]
         indexes = [
             models.Index(fields=["company", "status"]),
+            models.Index(fields=["company", "site_type"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]

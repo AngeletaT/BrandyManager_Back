@@ -5,6 +5,7 @@ from apps.organizations import models
 
 for model in (
     models.Company,
+    models.CompanyInvitation,
     models.CompanyMembership,
     models.OrganizationalUnit,
     models.Site,
