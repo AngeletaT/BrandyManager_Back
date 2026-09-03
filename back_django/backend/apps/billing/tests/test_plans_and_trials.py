@@ -24,8 +24,17 @@ class PlanAndTrialTests(TestCase):
 
         plan = Plan.objects.get(code="BASIC")
 
+        self.assertEqual(plan.features["limits"]["companies"], 1)
         self.assertEqual(plan.features["limits"]["sites"], 2)
         self.assertEqual(plan.features["limits"]["devices"], 4)
+        self.assertEqual(Plan.objects.get(code="STANDARD").features["limits"]["sites"], 10)
+        self.assertEqual(Plan.objects.get(code="PREMIUM").features["limits"]["sites"], 50)
+
+    def test_all_official_plans_limit_clients_to_one_company(self):
+        call_command("seed_initial_data", verbosity=0)
+
+        for code in OFFICIAL_PLAN_DEFINITIONS:
+            self.assertEqual(Plan.objects.get(code=code).features["limits"]["companies"], 1)
 
     def test_standard_trial_lasts_exactly_seven_days(self):
         call_command("seed_initial_data", verbosity=0)
@@ -49,6 +58,24 @@ class PlanAndTrialTests(TestCase):
         subscription.plan_snapshot["limits"]["sites"] = 99
 
         self.assertEqual(get_subscription_effective_limits(subscription=subscription)["sites"], 99)
+
+    def test_legacy_managed_companies_snapshot_is_normalized(self):
+        company = f.company("legacy-limits")
+        now = timezone.now()
+        subscription = Subscription.objects.create(
+            company=company,
+            plan=None,
+            status=Subscription.Status.ACTIVE,
+            started_at=now,
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30),
+            license_quantity=1,
+            unit_price="0.00",
+            currency="EUR",
+            plan_snapshot={"limits": {"managed_companies": 1, "sites": 2}},
+        )
+
+        self.assertEqual(subscription.effective_limits()["companies"], 1)
 
     def test_non_trial_blocked_status_has_no_functional_access(self):
         company = f.company("past-due")

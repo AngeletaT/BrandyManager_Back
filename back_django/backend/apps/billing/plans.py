@@ -5,7 +5,7 @@ TRIAL_PLAN_CODE = "STANDARD"
 TRIAL_DURATION_DAYS = 7
 
 PLAN_LIMIT_KEYS = (
-    "managed_companies",
+    "companies",
     "sites",
     "zones",
     "channels",
@@ -22,7 +22,7 @@ OFFICIAL_PLAN_DEFINITIONS = {
         "currency": "EUR",
         "included_licenses": 4,
         "limits": {
-            "managed_companies": 1,
+            "companies": 1,
             "sites": 2,
             "zones": 4,
             "channels": 1,
@@ -42,7 +42,7 @@ OFFICIAL_PLAN_DEFINITIONS = {
         "currency": "EUR",
         "included_licenses": 30,
         "limits": {
-            "managed_companies": 3,
+            "companies": 1,
             "sites": 10,
             "zones": 30,
             "channels": 6,
@@ -62,7 +62,7 @@ OFFICIAL_PLAN_DEFINITIONS = {
         "currency": "EUR",
         "included_licenses": 150,
         "limits": {
-            "managed_companies": 10,
+            "companies": 1,
             "sites": 50,
             "zones": 150,
             "channels": 25,

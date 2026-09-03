@@ -2,7 +2,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from apps.authorization.catalog import COMPANY_ROLE_DEFINITIONS, OFFICIAL_COMPANY_ROLE_CODES
-from apps.authorization.models import CompanyRole, CompanyRolePermission
+from apps.authorization.models import CompanyRole, CompanyRolePermission, Permission
 
 
 class SeedAuthorizationTests(TestCase):
@@ -29,3 +29,23 @@ class SeedAuthorizationTests(TestCase):
 
         self.assertTrue(set(COMPANY_ROLE_DEFINITIONS["OWNER"]["permissions"]).issubset(owner_permission_codes))
         self.assertNotIn("platform.companies.manage", owner_permission_codes)
+
+    def test_phase2_permission_codes_are_seeded(self):
+        call_command("seed_initial_data", verbosity=0)
+
+        expected_codes = {
+            "company.view",
+            "company.update",
+            "sites.create",
+            "sites.update",
+            "sites.archive",
+            "zones.create",
+            "zones.update",
+            "zones.archive",
+            "users.invite",
+            "users.update_role",
+            "invitations.cancel",
+            "invitations.resend",
+        }
+
+        self.assertTrue(expected_codes.issubset(set(Permission.objects.values_list("code", flat=True))))

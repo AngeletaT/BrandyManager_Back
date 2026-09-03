@@ -92,12 +92,18 @@ class Subscription(TimeStampedUUIDModel):
         return self.status.lower()
 
     def effective_limits(self):
+        def normalize_limits(limits):
+            normalized = dict(limits)
+            if "companies" not in normalized and "managed_companies" in normalized:
+                normalized["companies"] = normalized["managed_companies"]
+            return normalized
+
         if self.plan_snapshot.get("limits"):
-            return self.plan_snapshot["limits"]
+            return normalize_limits(self.plan_snapshot["limits"])
         if self.plan_snapshot.get("features", {}).get("limits"):
-            return self.plan_snapshot["features"]["limits"]
+            return normalize_limits(self.plan_snapshot["features"]["limits"])
         if self.plan_id and self.plan.features.get("limits"):
-            return self.plan.features["limits"]
+            return normalize_limits(self.plan.features["limits"])
         return {}
 
 
