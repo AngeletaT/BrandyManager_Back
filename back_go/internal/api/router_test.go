@@ -88,8 +88,15 @@ func TestModulesReturnsOperationalDomains(t *testing.T) {
 	if len(body.Data) == 0 {
 		t.Fatal("expected at least one operational module")
 	}
-	if body.Data[0].ManagedBy != "go" {
-		t.Fatalf("expected module managed by go, got %q", body.Data[0].ManagedBy)
+	managedByCode := map[string]string{}
+	for _, module := range body.Data {
+		managedByCode[module.Code] = module.ManagedBy
+	}
+	if managedByCode["scheduling"] != "django" {
+		t.Fatalf("expected scheduling configuration managed by django, got %q", managedByCode["scheduling"])
+	}
+	if managedByCode["playback"] != "go" {
+		t.Fatalf("expected playback managed by go, got %q", managedByCode["playback"])
 	}
 }
 

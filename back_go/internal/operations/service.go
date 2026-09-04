@@ -22,12 +22,12 @@ type Service struct {
 func NewService() Service {
 	return Service{
 		modules: []Module{
-			{Code: "organizations", Name: "Organizaciones", Description: "Empresas, sedes, zonas, ambitos y estructura operativa.", ManagedBy: "go", Status: "planned"},
-			{Code: "billing", Name: "Facturacion", Description: "Planes, suscripciones, licencias y asignaciones.", ManagedBy: "go", Status: "planned"},
-			{Code: "catalog", Name: "Catalogo", Description: "Contenidos de audio, canciones IA, etiquetas, assets y procesamiento.", ManagedBy: "go", Status: "planned"},
-			{Code: "playlists", Name: "Playlists y canales", Description: "Playlists, snapshots, canales y politicas musicales.", ManagedBy: "go", Status: "planned"},
-			{Code: "scheduling", Name: "Programaciones", Description: "Horarios, excepciones y asignaciones por ambito.", ManagedBy: "go", Status: "planned"},
-			{Code: "campaigns", Name: "Campanas", Description: "Mensajes corporativos, reglas y objetivos.", ManagedBy: "go", Status: "planned"},
+			{Code: "organizations", Name: "Organizaciones", Description: "Empresas, sedes, zonas, ambitos y estructura operativa.", ManagedBy: "django", Status: "ready"},
+			{Code: "billing", Name: "Facturacion", Description: "Planes, suscripciones, licencias y asignaciones.", ManagedBy: "django", Status: "planned"},
+			{Code: "catalog", Name: "Catalogo", Description: "Contenidos de audio, canciones IA, etiquetas, assets y procesamiento.", ManagedBy: "django", Status: "ready"},
+			{Code: "playlists", Name: "Playlists y canales", Description: "Playlists, snapshots y canales. Canales operativos quedan para fases posteriores.", ManagedBy: "django", Status: "partial"},
+			{Code: "scheduling", Name: "Programaciones", Description: "Configuracion persistente de horarios, excepciones y asignaciones por ambito.", ManagedBy: "django", Status: "ready"},
+			{Code: "campaigns", Name: "Campanas", Description: "Mensajes corporativos, reglas y objetivos.", ManagedBy: "django", Status: "planned"},
 			{Code: "devices", Name: "Dispositivos", Description: "Provisioning, credenciales, estado y sincronizacion.", ManagedBy: "go", Status: "planned"},
 			{Code: "playback", Name: "Reproduccion", Description: "Comandos, manifiestos, sesiones y eventos de reproduccion.", ManagedBy: "go", Status: "ready"},
 		},
@@ -42,16 +42,16 @@ func (s Service) Boundaries() []Boundary {
 				"autenticacion",
 				"usuarios",
 				"roles y permisos",
+				"empresas, sedes, zonas y ambitos",
+				"catalogo, playlists y programacion persistente",
 				"administracion interna mediante Django Admin",
 			},
 		},
 		{
 			Service: "back_go",
 			Responsibilities: []string{
-				"gestion operativa multiempresa",
 				"dispositivos",
-				"programaciones",
-				"catalogo y playlists",
+				"resolucion operativa de programacion publicada",
 				"motor de reproduccion",
 			},
 		},
