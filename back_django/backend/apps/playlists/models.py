@@ -28,6 +28,7 @@ class Playlist(TimeStampedUUIDModel):
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.GLOBAL)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     current_version = models.PositiveIntegerField(default=0)
+    revision = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="created_playlists")
     published_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
