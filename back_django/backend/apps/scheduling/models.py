@@ -19,6 +19,7 @@ class Schedule(TimeStampedUUIDModel):
     valid_from = models.DateField(null=True, blank=True)
     valid_until = models.DateField(null=True, blank=True)
     version = models.PositiveIntegerField(default=1)
+    revision = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="created_schedules")
     published_at = models.DateTimeField(null=True, blank=True)
 
@@ -28,6 +29,11 @@ class Schedule(TimeStampedUUIDModel):
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
+            raise ValidationError({"valid_until": "Debe ser posterior o igual a valid_from."})
 
 
 class ScheduleBlock(TimeStampedUUIDModel):
@@ -87,6 +93,19 @@ class ScheduleException(TimeStampedUUIDModel):
     priority = models.IntegerField(default=0)
     volume_override = models.PositiveSmallIntegerField(null=True, blank=True)
     description = models.TextField(blank=True)
+
+    def clean(self):
+        super().clean()
+        if self.start_time >= self.end_time:
+            raise ValidationError({"end_time": "Las excepciones que cruzan medianoche deben dividirse en dos registros."})
+        if self.volume_override is not None and self.volume_override > 100:
+            raise ValidationError({"volume_override": "El volumen debe estar entre 0 y 100."})
+        if self.action == self.Action.REPLACE and not self.playlist_id:
+            raise ValidationError({"playlist": "Las excepciones REPLACE necesitan una playlist."})
+        if self.action == self.Action.SILENCE and (self.playlist_id or self.channel_id):
+            raise ValidationError({"action": "Las excepciones SILENCE no aceptan contenido."})
+        if self.action == self.Action.VOLUME_OVERRIDE and self.volume_override is None:
+            raise ValidationError({"volume_override": "Las excepciones VOLUME_OVERRIDE necesitan volumen."})
 
 
 class ScheduleAssignment(TimeStampedUUIDModel):
