@@ -14,13 +14,14 @@ import (
 
 func testConfig() config.Config {
 	return config.Config{
-		ServiceName:       "brandymanager-go-test",
-		Environment:       "test",
-		Port:              "0",
-		DjangoAPIBaseURL:  "http://back_django:8000",
-		AuthMode:          "passthrough",
-		FrontendOrigins:   "http://localhost:5173",
-		ReadHeaderTimeout: time.Second,
+		ServiceName:        "brandymanager-go-test",
+		Environment:        "test",
+		Port:               "0",
+		DjangoAPIBaseURL:   "http://back_django:8000",
+		DjangoServiceToken: "service-token",
+		AuthMode:           "passthrough",
+		FrontendOrigins:    "http://localhost:5173",
+		ReadHeaderTimeout:  time.Second,
 	}
 }
 
@@ -100,29 +101,52 @@ func TestModulesReturnsOperationalDomains(t *testing.T) {
 	}
 }
 
-func TestQueuePlaybackCommandAcceptsValidCommand(t *testing.T) {
-	router := NewRouter(testConfig())
-	payload := []byte(`{"zone_id":"zone-1","command_type":"pause"}`)
-	request := authenticatedRequest(http.MethodPost, "/api/playback/commands", bytes.NewReader(payload))
+func TestAudioProxyForwardsDeviceAuthorizationRangeAndServiceToken(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device.access.token" {
+			t.Fatalf("device authorization was not forwarded")
+		}
+		if r.Header.Get("X-BrandyManager-Service-Token") != "service-token" {
+			t.Fatalf("service token was not forwarded")
+		}
+		if r.URL.Path == "/api/internal/player-token/introspect/" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"active": true, "device_id": "device-1", "company_id": "company-1",
+				"zone_id": "zone-1", "credential_id": "credential-1", "expires_at": time.Now().Add(time.Minute).Unix(),
+			})
+			return
+		}
+		if r.Header.Get("Range") != "bytes=0-3" {
+			t.Fatalf("range was not forwarded")
+		}
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("Content-Range", "bytes 0-3/12")
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", `"checksum"`)
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte("RIFF"))
+	}))
+	defer upstream.Close()
+
+	cfg := testConfig()
+	cfg.DjangoAPIBaseURL = upstream.URL
+	router := NewRouter(cfg)
+	request := httptest.NewRequest(http.MethodGet, "/api/player/audio/assets/asset-id/stream/", nil)
+	request.Header.Set("Authorization", "Bearer device.access.token")
+	request.Header.Set("Range", "bytes=0-3")
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %d", http.StatusAccepted, response.Code)
+	if response.Code != http.StatusPartialContent {
+		t.Fatalf("expected status %d, got %d", http.StatusPartialContent, response.Code)
 	}
-}
-
-func TestQueuePlaybackCommandRejectsInvalidCommand(t *testing.T) {
-	router := NewRouter(testConfig())
-	payload := []byte(`{"zone_id":"zone-1","command_type":"unknown"}`)
-	request := authenticatedRequest(http.MethodPost, "/api/playback/commands", bytes.NewReader(payload))
-	response := httptest.NewRecorder()
-
-	router.ServeHTTP(response, request)
-
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	if response.Body.String() != "RIFF" {
+		t.Fatalf("expected proxied body, got %q", response.Body.String())
+	}
+	if response.Header().Get("Content-Range") != "bytes 0-3/12" {
+		t.Fatalf("expected content range to be preserved")
 	}
 }
 

@@ -6,6 +6,10 @@ type Principal struct {
 	Authenticated bool   `json:"authenticated"`
 	Token         string `json:"-"`
 	Source        string `json:"source"`
+	DeviceID      string `json:"device_id,omitempty"`
+	CompanyID     string `json:"company_id,omitempty"`
+	ZoneID        string `json:"zone_id,omitempty"`
+	CredentialID  string `json:"credential_id,omitempty"`
 }
 
 type contextKey struct{}

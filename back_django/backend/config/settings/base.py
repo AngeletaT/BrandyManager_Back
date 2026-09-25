@@ -117,6 +117,19 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "media"))
+MEDIA_URL = "/media/"
+STORAGES = {
+    "default": {
+        "BACKEND": os.environ.get(
+            "DJANGO_DEFAULT_STORAGE_BACKEND",
+            "django.core.files.storage.FileSystemStorage",
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -150,6 +163,32 @@ BM_REFRESH_COOKIE_HTTP_ONLY = True
 BM_REFRESH_COOKIE_SECURE = os.environ.get("BM_REFRESH_COOKIE_SECURE", str(not DEBUG)).lower() in {"1", "true", "yes", "on"}
 BM_REFRESH_COOKIE_SAMESITE = os.environ.get("BM_REFRESH_COOKIE_SAMESITE", "Lax")
 BM_REFRESH_COOKIE_PATH = os.environ.get("BM_REFRESH_COOKIE_PATH", "/api/users/")
+
+BM_DEVICE_REFRESH_COOKIE_NAME = os.environ.get("BM_DEVICE_REFRESH_COOKIE_NAME", "bm_device_refresh")
+BM_DEVICE_REFRESH_COOKIE_SECURE = os.environ.get("BM_DEVICE_REFRESH_COOKIE_SECURE", str(not DEBUG)).lower() in {"1", "true", "yes", "on"}
+BM_DEVICE_REFRESH_COOKIE_SAMESITE = os.environ.get("BM_DEVICE_REFRESH_COOKIE_SAMESITE", "Lax")
+BM_DEVICE_REFRESH_COOKIE_PATH = os.environ.get("BM_DEVICE_REFRESH_COOKIE_PATH", "/api/player/")
+BM_DEVICE_ACCESS_TOKEN_LIFETIME = timedelta(minutes=int(os.environ.get("BM_DEVICE_ACCESS_TOKEN_MINUTES", "5")))
+BM_DEVICE_REFRESH_TOKEN_LIFETIME = timedelta(days=int(os.environ.get("BM_DEVICE_REFRESH_TOKEN_DAYS", "7")))
+BM_DEVICE_ACTIVATION_CODE_TTL = timedelta(minutes=int(os.environ.get("BM_DEVICE_ACTIVATION_CODE_TTL_MINUTES", "15")))
+BM_DEVICE_ACTIVATION_MAX_ATTEMPTS = int(os.environ.get("BM_DEVICE_ACTIVATION_MAX_ATTEMPTS", "5"))
+BM_DEVICE_ACTIVATION_RATE_LIMIT_ATTEMPTS = int(os.environ.get("BM_DEVICE_ACTIVATION_RATE_LIMIT_ATTEMPTS", "10"))
+BM_DEVICE_ACTIVATION_RATE_LIMIT_WINDOW = int(os.environ.get("BM_DEVICE_ACTIVATION_RATE_LIMIT_WINDOW_SECONDS", "300"))
+BM_DEVICE_JWT_ISSUER = os.environ.get("BM_DEVICE_JWT_ISSUER", "brandymanager-django")
+BM_DEVICE_JWT_AUDIENCE = os.environ.get("BM_DEVICE_JWT_AUDIENCE", "brandymanager-device")
+BM_DEVICE_JWT_SIGNING_KEY = os.environ.get("BM_DEVICE_JWT_SIGNING_KEY", SECRET_KEY)
+BM_DEVICE_TOKEN_HASH_SECRET = os.environ.get("BM_DEVICE_TOKEN_HASH_SECRET", SECRET_KEY)
+BM_GO_SERVICE_TOKEN = os.environ.get("BM_GO_SERVICE_TOKEN", "")
+BM_AUDIO_STORAGE_ALIAS = os.environ.get("BM_AUDIO_STORAGE_ALIAS", "default")
+BM_AUDIO_MAX_UPLOAD_BYTES = int(os.environ.get("BM_AUDIO_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+BM_AUDIO_CACHE_MAX_SECONDS = int(os.environ.get("BM_AUDIO_CACHE_MAX_SECONDS", "3600"))
+BM_CONTENT_MANIFEST_TTL = timedelta(seconds=int(os.environ.get("BM_CONTENT_MANIFEST_TTL_SECONDS", "3600")))
+BM_DEVICE_HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("BM_DEVICE_HEARTBEAT_INTERVAL_SECONDS", "30"))
+BM_DEVICE_OFFLINE_THRESHOLD_SECONDS = int(os.environ.get("BM_DEVICE_OFFLINE_THRESHOLD_SECONDS", "90"))
+BM_PLAYER_TELEMETRY_RATE_LIMIT = int(os.environ.get("BM_PLAYER_TELEMETRY_RATE_LIMIT", "120"))
+BM_PLAYER_TELEMETRY_MAX_AGE_SECONDS = int(os.environ.get("BM_PLAYER_TELEMETRY_MAX_AGE_SECONDS", "86400"))
+BM_PLAYER_TELEMETRY_FUTURE_SKEW_SECONDS = int(os.environ.get("BM_PLAYER_TELEMETRY_FUTURE_SKEW_SECONDS", "300"))
+BM_PLAYER_COMMAND_BATCH_SIZE = int(os.environ.get("BM_PLAYER_COMMAND_BATCH_SIZE", "50"))
 
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "BrandyManager <no-reply@brandymanager.local>")
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
