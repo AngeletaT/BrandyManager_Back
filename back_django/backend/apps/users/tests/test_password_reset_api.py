@@ -25,6 +25,8 @@ from apps.users.services import create_email_verification_token, create_password
     BM_REFRESH_COOKIE_SECURE=False,
     BM_REFRESH_COOKIE_SAMESITE="Lax",
     BM_REFRESH_COOKIE_PATH="/api/users/",
+    CORS_ALLOWED_ORIGINS=["http://localhost:5173"],
+    CSRF_TRUSTED_ORIGINS=["http://localhost:5173"],
 )
 class PasswordResetAPITests(APITestCase):
     def create_verified_user(self, email="client@example.com"):

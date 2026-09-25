@@ -14,7 +14,7 @@ from apps.catalog.models import AudioAsset, SongTag
 from apps.devices.models import DeviceSync, DeviceZoneAssignment
 from apps.devices.services import replace_zone_device, assign_device_to_zone
 from apps.organizations.models import MembershipGrant, ResourceScope
-from apps.playback.services import can_execute_playback_action, create_manifest
+from apps.playback.services import can_execute_playback_action, create_manifest, create_zone_operational_snapshot
 from apps.playlists.models import PlaylistSnapshot
 from apps.playlists.services import publish_playlist
 from apps.scheduling.models import ScheduleAssignment
@@ -89,10 +89,12 @@ class DatabaseRuleTests(TestCase):
         self.assertIsNone(license_assignment.unassigned_at)
         self.assertEqual(new_assignment.zone_id, self.zone.id)
 
-    def test_only_one_primary_device_active_per_zone(self):
-        assign_device_to_zone(device=f.device(self.company, "one"), zone=self.zone)
+    def test_multiple_devices_can_be_active_per_zone(self):
+        first = assign_device_to_zone(device=f.device(self.company, "one"), zone=self.zone)
+        second = assign_device_to_zone(device=f.device(self.company, "two"), zone=self.zone)
 
-        self.assert_invalid(lambda: assign_device_to_zone(device=f.device(self.company, "two"), zone=self.zone))
+        self.assertIsNone(first.unassigned_at)
+        self.assertIsNone(second.unassigned_at)
 
     def test_song_has_no_artist_or_album_fields(self):
         song = f.song()
@@ -135,10 +137,12 @@ class DatabaseRuleTests(TestCase):
         self.assertEqual(snapshot.items.count(), 1)
 
     def test_device_uses_versioned_manifest(self):
-        manifest = create_manifest(zone=self.zone, version=1, checksum="checksum", generated_at=timezone.now())
+        snapshot = create_zone_operational_snapshot(zone=self.zone, reason="test_manifest")
+        manifest = create_manifest(zone=self.zone, operational_snapshot=snapshot)
 
         self.assertEqual(manifest.version, 1)
         self.assertEqual(manifest.zone_id, self.zone.id)
+        self.assertEqual(manifest.operational_snapshot_id, snapshot.id)
 
     def test_effective_schedule_respects_priority_specificity_and_locks(self):
         company_scope = f.scope(self.company)

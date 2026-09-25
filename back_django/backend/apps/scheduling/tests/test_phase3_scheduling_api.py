@@ -13,6 +13,7 @@ from apps.organizations.models import CompanyMembership, MembershipGrant, Resour
 from apps.organizations.tests import factories as f
 from apps.playlists.models import Playlist, PlaylistItem, PlaylistSnapshot
 from apps.playlists.services import publish_playlist
+from apps.playback.models import ZoneOperationalSnapshot
 from apps.scheduling.models import Schedule, ScheduleAssignment, ScheduleBlock, ScheduleException
 
 
@@ -200,6 +201,9 @@ class Phase3SchedulingAPITests(APITestCase):
         self.assertEqual(ScheduleBlock.objects.count(), 1)
         self.assertEqual(ScheduleException.objects.count(), 1)
         self.assertEqual(ScheduleAssignment.objects.count(), 1)
+        operational = ZoneOperationalSnapshot.objects.get(zone=self.zone, status=ZoneOperationalSnapshot.Status.READY)
+        self.assertEqual(str(operational.schedule_snapshot.schedule_id), schedule_id)
+        self.assertEqual(operational.snapshot_data["schedule"]["snapshot_data"]["schedule_version"], 2)
 
     def test_block_validation_rejects_channel_midnight_and_unpublished_playlist(self):
         unpublished = Playlist.objects.create(owner_company=self.company, name="Draft", code="DRAFT", status=Playlist.Status.DRAFT)
@@ -426,4 +430,3 @@ class Phase3SchedulingAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(PlaylistSnapshot.objects.filter(playlist=playlist).count(), 1)
         self.assertNotIn("execution_observed", response.data)
-
