@@ -236,6 +236,8 @@ class SiteUpdateSerializer(SiteCreateSerializer):
 class ZoneSerializer(serializers.ModelSerializer):
     site = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    channel = serializers.SerializerMethodField()
+    device_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Zone
@@ -247,6 +249,8 @@ class ZoneSerializer(serializers.ModelSerializer):
             "description",
             "status",
             "timezone",
+            "channel",
+            "device_count",
             "created_at",
             "updated_at",
             "permissions",
@@ -255,6 +259,16 @@ class ZoneSerializer(serializers.ModelSerializer):
 
     def get_site(self, obj):
         return {"id": str(obj.site_id), "name": obj.site.name}
+
+    def get_channel(self, obj):
+        assignments = getattr(obj, "active_channel_assignments", [])
+        if not assignments:
+            return None
+        channel = assignments[0].channel
+        return {"id": str(channel.id), "name": channel.name, "status": channel.status}
+
+    def get_device_count(self, obj):
+        return getattr(obj, "active_device_count", 0)
 
     def get_permissions(self, obj):
         membership = self.context.get("membership")

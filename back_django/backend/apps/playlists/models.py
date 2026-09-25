@@ -121,6 +121,8 @@ class Channel(TimeStampedUUIDModel):
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.GLOBAL)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     cover_storage_key = models.CharField(max_length=512, blank=True)
+    current_version = models.PositiveIntegerField(default=0)
+    revision = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="created_channels")
     published_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -129,6 +131,11 @@ class Channel(TimeStampedUUIDModel):
         constraints = [
             models.UniqueConstraint(fields=["owner_company", "code"], name="uniq_channel_owner_code"),
             models.UniqueConstraint(fields=["code"], condition=models.Q(owner_company__isnull=True), name="uniq_global_channel_code"),
+        ]
+        indexes = [
+            models.Index(fields=["owner_company", "status"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
         ]
 
 
@@ -163,6 +170,52 @@ class ChannelPolicy(TimeStampedUUIDModel):
     normalize_loudness = models.BooleanField(default=True)
     target_lufs = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     settings = models.JSONField(default=dict, blank=True)
+
+
+class ChannelSnapshot(UUIDModel):
+    class Status(models.TextChoices):
+        CREATED = "CREATED", "Created"
+        PUBLISHED = "PUBLISHED", "Published"
+        SUPERSEDED = "SUPERSEDED", "Superseded"
+
+    channel = models.ForeignKey(Channel, on_delete=models.PROTECT, related_name="snapshots")
+    version = models.PositiveIntegerField()
+    checksum = models.CharField(max_length=128)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CREATED, db_index=True)
+    policy_snapshot = models.JSONField(default=dict, blank=True)
+    published_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="published_channel_snapshots")
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["channel", "version"], name="uniq_channel_snapshot_version"),
+        ]
+        indexes = [
+            models.Index(fields=["channel", "status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+
+class ChannelSnapshotPlaylist(UUIDModel):
+    snapshot = models.ForeignKey(ChannelSnapshot, on_delete=models.PROTECT, related_name="playlists")
+    playlist = models.ForeignKey(Playlist, on_delete=models.PROTECT, related_name="channel_snapshot_references")
+    playlist_snapshot = models.ForeignKey(PlaylistSnapshot, on_delete=models.PROTECT, related_name="channel_snapshot_references")
+    weight = models.PositiveIntegerField(default=1)
+    priority = models.IntegerField(default=0)
+    active_from = models.DateTimeField(null=True, blank=True)
+    active_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["snapshot", "playlist"], name="uniq_channel_snapshot_playlist"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.playlist_snapshot_id and self.playlist_snapshot.playlist_id != self.playlist_id:
+            raise ValidationError({"playlist_snapshot": "La version publicada debe pertenecer a la playlist."})
 
 
 class ContentAccessGrant(UUIDModel):

@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 
 from apps.authorization.services import site_ids_accessible_by_membership, zone_ids_accessible_by_membership
@@ -48,8 +48,22 @@ def get_site_for_membership(*, membership, site_id, permission_code="sites.view"
 
 
 def list_zones_for_membership(*, membership, permission_code="zones.view", site_id=None, search="", status_value=""):
+    from apps.organizations.models import ZoneChannelAssignment
+
     zone_ids = zone_ids_accessible_by_membership(membership=membership, permission_code=permission_code)
-    queryset = Zone.objects.filter(company=membership.company).select_related("site", "company").order_by("site__name", "name")
+    queryset = (
+        Zone.objects.filter(company=membership.company)
+        .select_related("site", "company")
+        .prefetch_related(
+            Prefetch(
+                "channel_assignments",
+                queryset=ZoneChannelAssignment.objects.filter(unassigned_at__isnull=True).select_related("channel"),
+                to_attr="active_channel_assignments",
+            )
+        )
+        .annotate(active_device_count=Count("devices", filter=~Q(devices__administrative_status="ARCHIVED")))
+        .order_by("site__name", "name")
+    )
     if site_id:
         queryset = queryset.filter(site_id=site_id)
     if zone_ids is not None:

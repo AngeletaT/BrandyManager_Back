@@ -10,6 +10,7 @@ for model in (
     models.OrganizationalUnit,
     models.Site,
     models.Zone,
+    models.ZoneChannelAssignment,
     models.ResourceGroup,
     models.ResourceGroupSite,
     models.ResourceGroupZone,

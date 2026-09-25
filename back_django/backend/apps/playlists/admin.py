@@ -11,6 +11,8 @@ for model in (
     models.Channel,
     models.ChannelPlaylist,
     models.ChannelPolicy,
+    models.ChannelSnapshot,
+    models.ChannelSnapshotPlaylist,
     models.ContentAccessGrant,
 ):
     admin.site.register(model)

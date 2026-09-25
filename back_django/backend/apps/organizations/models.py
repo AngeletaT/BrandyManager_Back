@@ -256,6 +256,39 @@ class Zone(TimeStampedUUIDModel):
         return self.timezone or self.site.timezone
 
 
+class ZoneChannelAssignment(UUIDModel):
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="zone_channel_assignments")
+    zone = models.ForeignKey(Zone, on_delete=models.PROTECT, related_name="channel_assignments")
+    channel = models.ForeignKey("playlists.Channel", on_delete=models.PROTECT, related_name="zone_assignments")
+    assigned_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_zone_channels")
+    assigned_at = models.DateTimeField(db_index=True)
+    unassigned_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="unassigned_zone_channels")
+    unassigned_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone"],
+                condition=models.Q(unassigned_at__isnull=True),
+                name="uniq_active_channel_assignment_per_zone",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "assigned_at"]),
+            models.Index(fields=["channel", "unassigned_at"]),
+            models.Index(fields=["zone", "unassigned_at"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.zone_id and self.zone.company_id != self.company_id:
+            raise ValidationError({"zone": "La zona debe pertenecer a la misma empresa."})
+        if self.channel_id and self.channel.owner_company_id not in (None, self.company_id):
+            raise ValidationError({"channel": "El canal debe ser global o pertenecer a la misma empresa."})
+
+
 class ResourceGroup(TimeStampedUUIDModel):
     class GroupType(models.TextChoices):
         SITE = "SITE", "Site"
