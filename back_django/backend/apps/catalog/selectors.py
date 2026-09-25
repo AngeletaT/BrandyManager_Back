@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.catalog.models import AudioAsset, AudioContent, Genre, Song, Tag
 from apps.playlists.models import ContentAccessGrant
@@ -143,3 +144,54 @@ def list_available_assets_for_song(*, song):
         asset_role=AudioAsset.AssetRole.PREVIEW,
         processing_status=AudioAsset.ProcessingStatus.READY,
     ).order_by("version", "id")
+
+
+def get_authorized_manifest_asset_for_device(*, device, asset_id, at=None):
+    from apps.playback.models import ContentManifest
+
+    at = at or timezone.now()
+    manifest = (
+        ContentManifest.objects.filter(
+            company_id=device.company_id,
+            zone_id=device.zone_id,
+            status=ContentManifest.Status.READY,
+            operational_snapshot__isnull=False,
+            valid_from__lte=at,
+            expires_at__gt=at,
+        )
+        .select_related("operational_snapshot")
+        .order_by("-version")
+        .first()
+    )
+    if not manifest:
+        return None, None
+    shared_content_ids = ContentAccessGrant.objects.filter(
+        company_id=device.company_id,
+        audio_content__isnull=False,
+        revoked_at__isnull=True,
+    ).values("audio_content_id")
+    item = (
+        manifest.items.select_related("audio_asset", "audio_asset__audio_content")
+        .filter(
+            audio_asset_id=asset_id,
+            audio_asset__processing_status=AudioAsset.ProcessingStatus.READY,
+            audio_asset__audio_content__status=AudioContent.Status.READY,
+            audio_asset__audio_content__is_active=True,
+            audio_asset__audio_content__rights_verified_at__isnull=False,
+        )
+        .exclude(audio_asset__audio_content__rights_holder="")
+        .exclude(audio_asset__audio_content__rights_reference="")
+        .filter(
+            Q(
+                audio_asset__audio_content__visibility=AudioContent.Visibility.GLOBAL,
+                audio_asset__audio_content__owner_company__isnull=True,
+            )
+            | Q(audio_asset__audio_content__owner_company_id=device.company_id)
+            | Q(
+                audio_asset__audio_content__visibility=AudioContent.Visibility.SHARED,
+                audio_asset__audio_content_id__in=shared_content_ids,
+            )
+        )
+        .first()
+    )
+    return manifest, item

@@ -74,6 +74,16 @@ class AudioContent(TimeStampedUUIDModel):
     duration_ms = models.PositiveBigIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="created_audio_contents")
+    rights_holder = models.CharField(max_length=255, blank=True)
+    rights_reference = models.CharField(max_length=255, blank=True)
+    rights_verified_at = models.DateTimeField(null=True, blank=True)
+    rights_verified_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rights_verified_audio_contents",
+    )
     published_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
 
@@ -188,6 +198,11 @@ class AudioAsset(TimeStampedUUIDModel):
             models.UniqueConstraint(fields=["audio_content", "version", "asset_role"], name="uniq_audio_asset_content_version_role"),
             models.UniqueConstraint(fields=["storage_backend", "storage_key"], name="uniq_audio_asset_storage_key"),
             models.UniqueConstraint(fields=["audio_content"], condition=models.Q(is_primary=True, processing_status="READY"), name="uniq_primary_ready_asset_per_content"),
+            models.UniqueConstraint(
+                fields=["checksum_sha256"],
+                condition=models.Q(asset_role="ORIGINAL", processing_status="READY"),
+                name="uniq_ready_audio_asset_checksum",
+            ),
         ]
         indexes = [
             models.Index(fields=["audio_content", "processing_status"]),
