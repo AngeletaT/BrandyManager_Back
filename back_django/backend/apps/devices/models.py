@@ -2,6 +2,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from shared.db.models import TimeStampedUUIDModel, UUIDModel
 
@@ -21,12 +22,54 @@ class Device(TimeStampedUUIDModel):
         DISABLED = "DISABLED", "Disabled"
         REVOKED = "REVOKED", "Revoked"
 
+    class AdministrativeStatus(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        SUSPENDED = "SUSPENDED", "Suspended"
+        ARCHIVED = "ARCHIVED", "Archived"
+
+    class ActivationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACTIVATED = "ACTIVATED", "Activated"
+        REVOKED = "REVOKED", "Revoked"
+
+    class ConnectivityStatus(models.TextChoices):
+        UNKNOWN = "UNKNOWN", "Unknown"
+        ONLINE = "ONLINE", "Online"
+        OFFLINE = "OFFLINE", "Offline"
+
     company = models.ForeignKey("organizations.Company", on_delete=models.PROTECT, related_name="devices")
+    zone = models.ForeignKey(
+        "organizations.Zone",
+        on_delete=models.PROTECT,
+        related_name="devices",
+        null=True,
+        blank=True,
+    )
     hardware_id = models.CharField(max_length=255, unique=True)
     code = models.CharField(max_length=80)
     name = models.CharField(max_length=255)
     device_type = models.CharField(max_length=30, choices=DeviceType.choices)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PROVISIONING, db_index=True)
+    administrative_status = models.CharField(
+        max_length=20,
+        choices=AdministrativeStatus.choices,
+        default=AdministrativeStatus.ACTIVE,
+        db_index=True,
+    )
+    activation_status = models.CharField(
+        max_length=20,
+        choices=ActivationStatus.choices,
+        default=ActivationStatus.PENDING,
+        db_index=True,
+    )
+    connectivity_status = models.CharField(
+        max_length=20,
+        choices=ConnectivityStatus.choices,
+        default=ConnectivityStatus.UNKNOWN,
+        db_index=True,
+    )
+    configuration = models.JSONField(default=dict, blank=True)
+    configuration_version = models.PositiveIntegerField(default=1)
     os_name = models.CharField(max_length=120, blank=True)
     os_version = models.CharField(max_length=120, blank=True)
     app_version = models.CharField(max_length=120, blank=True)
@@ -38,6 +81,8 @@ class Device(TimeStampedUUIDModel):
     last_sync_at = models.DateTimeField(null=True, blank=True)
     activated_at = models.DateTimeField(null=True, blank=True)
     deactivated_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -46,10 +91,18 @@ class Device(TimeStampedUUIDModel):
         ]
         indexes = [
             models.Index(fields=["company", "status"]),
+            models.Index(fields=["company", "administrative_status"]),
+            models.Index(fields=["company", "activation_status"]),
+            models.Index(fields=["zone", "administrative_status"]),
             models.Index(fields=["last_seen_at"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.zone_id and self.zone.company_id != self.company_id:
+            raise ValidationError({"zone": "La zona debe pertenecer a la misma empresa."})
 
 
 class DeviceZoneAssignment(UUIDModel):
@@ -71,7 +124,6 @@ class DeviceZoneAssignment(UUIDModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["device"], condition=models.Q(unassigned_at__isnull=True), name="uniq_active_assignment_per_device"),
-            models.UniqueConstraint(fields=["zone"], condition=models.Q(unassigned_at__isnull=True, assignment_role="PRIMARY"), name="uniq_active_primary_device_per_zone"),
         ]
         indexes = [
             models.Index(fields=["company", "assigned_at"]),
@@ -84,6 +136,46 @@ class DeviceZoneAssignment(UUIDModel):
             raise ValidationError({"device": "El dispositivo debe pertenecer a la misma empresa."})
         if self.zone.company_id != self.company_id:
             raise ValidationError({"zone": "La zona debe pertenecer a la misma empresa."})
+
+
+class DeviceActivation(TimeStampedUUIDModel):
+    device = models.ForeignKey(Device, on_delete=models.PROTECT, related_name="activation_codes")
+    code_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_attempt_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_device_activations",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device"],
+                condition=models.Q(consumed_at__isnull=True, revoked_at__isnull=True),
+                name="uniq_active_device_activation_per_device",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["device", "expires_at"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def is_active(self, *, at):
+        return (
+            self.consumed_at is None
+            and self.revoked_at is None
+            and self.expires_at > at
+            and self.attempts < self.max_attempts
+        )
 
 
 class DeviceCredential(UUIDModel):
@@ -102,10 +194,22 @@ class DeviceCredential(UUIDModel):
     revoked_at = models.DateTimeField(null=True, blank=True)
     rotated_from = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="rotated_to")
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["device", "status"]),
+            models.Index(fields=["expires_at"]),
+        ]
+
 
 class DeviceCommand(UUIDModel):
     class CommandType(models.TextChoices):
         SET_VOLUME = "SET_VOLUME", "Set volume"
+        MUTE = "MUTE", "Mute"
+        UNMUTE = "UNMUTE", "Unmute"
+        RESTART_PLAYBACK = "RESTART_PLAYBACK", "Restart playback"
+        FORCE_SYNC = "FORCE_SYNC", "Force sync"
+        ENABLE = "ENABLE", "Enable"
+        DISABLE = "DISABLE", "Disable"
         CHANGE_CHANNEL = "CHANGE_CHANNEL", "Change channel"
         PAUSE = "PAUSE", "Pause"
         RESUME = "RESUME", "Resume"
@@ -137,6 +241,20 @@ class DeviceCommand(UUIDModel):
     executed_at = models.DateTimeField(null=True, blank=True)
     result = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
+    idempotency_key = models.UUIDField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                condition=models.Q(idempotency_key__isnull=False),
+                name="uniq_device_command_idempotency_key",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["device", "status"]),
+            models.Index(fields=["company", "created_at"]),
+        ]
 
     def clean(self):
         super().clean()
@@ -154,13 +272,46 @@ class DeviceEvent(UUIDModel):
 
     company = models.ForeignKey("organizations.Company", on_delete=models.PROTECT, related_name="device_events")
     device = models.ForeignKey(Device, on_delete=models.PROTECT, related_name="events")
+    external_event_id = models.UUIDField(null=True, blank=True)
+    sequence = models.PositiveBigIntegerField(null=True, blank=True)
     event_type = models.CharField(max_length=120)
     severity = models.CharField(max_length=20, choices=Severity.choices, default=Severity.INFO)
     occurred_at = models.DateTimeField(db_index=True)
+    received_at = models.DateTimeField(default=timezone.now, db_index=True)
+    manifest = models.ForeignKey(
+        "playback.ContentManifest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="device_events",
+    )
+    configuration_version = models.PositiveIntegerField(null=True, blank=True)
+    audio_asset = models.ForeignKey(
+        "catalog.AudioAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="device_events",
+    )
+    position_ms = models.PositiveBigIntegerField(null=True, blank=True)
+    error_code = models.CharField(max_length=80, blank=True)
     payload = models.JSONField(default=dict, blank=True)
     app_version = models.CharField(max_length=120, blank=True)
     request_id = models.CharField(max_length=120, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "external_event_id"],
+                condition=models.Q(external_event_id__isnull=False),
+                name="uniq_device_external_event",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["device", "sequence"]),
+            models.Index(fields=["company", "occurred_at"]),
+        ]
 
 
 class DeviceState(models.Model):
@@ -184,6 +335,7 @@ class DeviceState(models.Model):
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
     manifest_version = models.PositiveIntegerField(null=True, blank=True)
     schedule_version = models.PositiveIntegerField(null=True, blank=True)
+    last_sequence = models.PositiveBigIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
 

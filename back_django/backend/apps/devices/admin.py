@@ -6,6 +6,7 @@ from apps.devices import models
 for model in (
     models.Device,
     models.DeviceZoneAssignment,
+    models.DeviceActivation,
     models.DeviceCredential,
     models.DeviceCommand,
     models.DeviceEvent,
