@@ -80,6 +80,13 @@ class ContentManifest(UUIDModel):
 
     company = models.ForeignKey("organizations.Company", on_delete=models.PROTECT, related_name="content_manifests")
     zone = models.ForeignKey("organizations.Zone", on_delete=models.PROTECT, related_name="content_manifests")
+    operational_snapshot = models.ForeignKey(
+        "playback.ZoneOperationalSnapshot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="content_manifests",
+    )
     version = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.GENERATING, db_index=True)
     generated_at = models.DateTimeField(db_index=True)
@@ -106,6 +113,54 @@ class ContentManifest(UUIDModel):
         super().clean()
         if self.zone.company_id != self.company_id:
             raise ValidationError({"zone": "La zona debe pertenecer a la misma empresa."})
+        if self.operational_snapshot_id:
+            if self.operational_snapshot.company_id != self.company_id:
+                raise ValidationError({"operational_snapshot": "El snapshot debe pertenecer a la misma empresa."})
+            if self.operational_snapshot.zone_id != self.zone_id:
+                raise ValidationError({"operational_snapshot": "El snapshot debe pertenecer a la misma zona."})
+
+
+class ZoneOperationalSnapshot(UUIDModel):
+    class Status(models.TextChoices):
+        READY = "READY", "Ready"
+        SUPERSEDED = "SUPERSEDED", "Superseded"
+        ERROR = "ERROR", "Error"
+
+    company = models.ForeignKey("organizations.Company", on_delete=models.PROTECT, related_name="zone_operational_snapshots")
+    zone = models.ForeignKey("organizations.Zone", on_delete=models.PROTECT, related_name="operational_snapshots")
+    version = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.READY, db_index=True)
+    channel = models.ForeignKey("playlists.Channel", on_delete=models.PROTECT, null=True, blank=True, related_name="zone_operational_snapshots")
+    channel_snapshot = models.ForeignKey("playlists.ChannelSnapshot", on_delete=models.PROTECT, null=True, blank=True, related_name="zone_operational_snapshots")
+    schedule_snapshot = models.ForeignKey("scheduling.ScheduleSnapshot", on_delete=models.PROTECT, null=True, blank=True, related_name="zone_operational_snapshots")
+    checksum = models.CharField(max_length=128)
+    generated_at = models.DateTimeField(db_index=True)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=80, blank=True)
+    snapshot_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["zone", "version"], name="uniq_zone_operational_snapshot_version"),
+        ]
+        indexes = [
+            models.Index(fields=["company", "status"]),
+            models.Index(fields=["zone", "version"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.zone_id and self.zone.company_id != self.company_id:
+            raise ValidationError({"zone": "La zona debe pertenecer a la misma empresa."})
+        if self.channel_id and self.channel.owner_company_id not in (None, self.company_id):
+            raise ValidationError({"channel": "El canal debe ser global o pertenecer a la misma empresa."})
+        if self.channel_snapshot_id and self.channel_snapshot.channel_id != self.channel_id:
+            raise ValidationError({"channel_snapshot": "La version del canal no corresponde al canal indicado."})
+        if self.schedule_snapshot_id and self.schedule_snapshot.schedule.company_id != self.company_id:
+            raise ValidationError({"schedule_snapshot": "La version de programacion debe pertenecer a la misma empresa."})
 
 
 class ContentManifestItem(UUIDModel):

@@ -9,6 +9,7 @@ for model in (
     models.PlaybackPolicyAssignment,
     models.ContentManifest,
     models.ContentManifestItem,
+    models.ZoneOperationalSnapshot,
     models.PlaybackSession,
     models.PlaybackEvent,
 ):

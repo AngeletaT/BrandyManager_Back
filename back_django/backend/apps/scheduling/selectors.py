@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.authorization.services import get_company_scope, membership_has_permission, site_ids_accessible_by_membership, zone_ids_accessible_by_membership
 from apps.organizations.models import ResourceScope, Site, Zone
-from apps.scheduling.models import Schedule, ScheduleAssignment, ScheduleBlock, ScheduleException
+from apps.scheduling.models import Schedule, ScheduleAssignment, ScheduleBlock, ScheduleException, ScheduleSnapshot
 
 
 SCHEDULE_ORDERING_FIELDS = {
@@ -122,6 +122,14 @@ def get_schedule_assignment(*, schedule, assignment_id):
     if not assignment_uuid:
         return None
     return schedule.assignments.select_related("scope", "scope__site", "scope__zone").filter(id=assignment_uuid).first()
+
+
+def get_latest_published_schedule_snapshot(*, schedule):
+    return (
+        ScheduleSnapshot.objects.filter(schedule=schedule, status=ScheduleSnapshot.Status.PUBLISHED)
+        .order_by("-version", "-created_at")
+        .first()
+    )
 
 
 def list_relevant_scopes_for_zone(*, zone):
@@ -273,4 +281,3 @@ def list_next_occurrences(*, schedule, start_at, days=14, limit=20):
                 break
         current += timedelta(days=1)
     return sorted(occurrences, key=lambda item: item["starts_at"])[:limit]
-

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ValidationError
@@ -6,8 +8,8 @@ from django.utils import timezone
 
 from apps.authorization.services import get_company_scope, get_or_create_site_scope, get_or_create_zone_scope
 from apps.organizations.models import ResourceScope, Site, Zone
-from apps.playlists.models import Playlist
-from apps.playlists.selectors import get_accessible_playlist_by_id, get_latest_published_snapshot
+from apps.playlists.models import Channel, Playlist
+from apps.playlists.selectors import get_accessible_playlist_by_id, get_latest_published_channel_snapshot, get_latest_published_snapshot
 from apps.scheduling.exceptions import (
     ScheduleAssignmentInvalid,
     ScheduleConflict,
@@ -15,7 +17,7 @@ from apps.scheduling.exceptions import (
     ScheduleNotPublishable,
     ScheduleRevisionConflict,
 )
-from apps.scheduling.models import Schedule, ScheduleAssignment, ScheduleBlock, ScheduleException
+from apps.scheduling.models import Schedule, ScheduleAssignment, ScheduleBlock, ScheduleException, ScheduleSnapshot
 from apps.scheduling.selectors import (
     list_assignment_conflicts,
     list_block_conflicts,
@@ -55,6 +57,89 @@ def assert_playlist_schedulable(*, company, playlist_id):
     if playlist.status != Playlist.Status.PUBLISHED or not get_latest_published_snapshot(playlist=playlist):
         raise ScheduleContentUnavailable(fields={"playlist_id": ["La playlist debe estar publicada para programarse."]})
     return playlist
+
+
+def _iso_or_none(value):
+    return value.isoformat() if value else None
+
+
+def schedule_snapshot_payload(*, schedule, version):
+    blocks = []
+    for block in schedule.blocks.select_related("playlist", "channel").order_by("day_of_week", "start_time", "-priority", "id"):
+        playlist_snapshot = get_latest_published_snapshot(playlist=block.playlist) if block.playlist_id else None
+        channel_snapshot = get_latest_published_channel_snapshot(channel=block.channel) if block.channel_id else None
+        blocks.append(
+            {
+                "id": str(block.id),
+                "day_of_week": block.day_of_week,
+                "start_time": block.start_time.isoformat(),
+                "end_time": block.end_time.isoformat(),
+                "content_type": block.content_type,
+                "playlist_id": str(block.playlist_id) if block.playlist_id else None,
+                "playlist_snapshot_id": str(playlist_snapshot.id) if playlist_snapshot else None,
+                "playlist_snapshot_version": playlist_snapshot.version if playlist_snapshot else None,
+                "channel_id": str(block.channel_id) if block.channel_id else None,
+                "channel_snapshot_id": str(channel_snapshot.id) if channel_snapshot else None,
+                "channel_snapshot_version": channel_snapshot.version if channel_snapshot else None,
+                "priority": block.priority,
+                "volume_override": block.volume_override,
+            }
+        )
+    exceptions = []
+    for exception in schedule.exceptions.select_related("playlist", "channel").order_by("date", "start_time", "-priority", "id"):
+        playlist_snapshot = get_latest_published_snapshot(playlist=exception.playlist) if exception.playlist_id else None
+        channel_snapshot = get_latest_published_channel_snapshot(channel=exception.channel) if exception.channel_id else None
+        exceptions.append(
+            {
+                "id": str(exception.id),
+                "date": exception.date.isoformat(),
+                "start_time": exception.start_time.isoformat(),
+                "end_time": exception.end_time.isoformat(),
+                "action": exception.action,
+                "playlist_id": str(exception.playlist_id) if exception.playlist_id else None,
+                "playlist_snapshot_id": str(playlist_snapshot.id) if playlist_snapshot else None,
+                "playlist_snapshot_version": playlist_snapshot.version if playlist_snapshot else None,
+                "channel_id": str(exception.channel_id) if exception.channel_id else None,
+                "channel_snapshot_id": str(channel_snapshot.id) if channel_snapshot else None,
+                "channel_snapshot_version": channel_snapshot.version if channel_snapshot else None,
+                "priority": exception.priority,
+                "volume_override": exception.volume_override,
+                "description": exception.description,
+            }
+        )
+    assignments = []
+    for assignment in schedule.assignments.select_related("scope", "scope__site", "scope__zone").order_by("-is_locked", "-priority", "created_at", "id"):
+        assignments.append(
+            {
+                "id": str(assignment.id),
+                "scope": {
+                    "id": str(assignment.scope_id),
+                    "type": assignment.scope.scope_type,
+                    "site_id": str(assignment.scope.site_id) if assignment.scope.site_id else None,
+                    "zone_id": str(assignment.scope.zone_id) if assignment.scope.zone_id else None,
+                },
+                "priority": assignment.priority,
+                "is_locked": assignment.is_locked,
+                "starts_at": _iso_or_none(assignment.starts_at),
+                "ends_at": _iso_or_none(assignment.ends_at),
+                "is_active": assignment.is_active,
+            }
+        )
+    return {
+        "schedule_id": str(schedule.id),
+        "schedule_version": version,
+        "timezone": schedule.timezone,
+        "valid_from": _iso_or_none(schedule.valid_from),
+        "valid_until": _iso_or_none(schedule.valid_until),
+        "blocks": blocks,
+        "exceptions": exceptions,
+        "assignments": assignments,
+    }
+
+
+def schedule_snapshot_checksum(*, payload):
+    source = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def resolve_scope_from_payload(*, company, scope_type, site_id=None, zone_id=None):
@@ -325,26 +410,58 @@ def deactivate_schedule_assignment(*, schedule, assignment, expected_revision):
 
 
 @transaction.atomic
-def publish_schedule(*, schedule, expected_revision):
+def publish_schedule(*, schedule, expected_revision, published_by=None):
     schedule = Schedule.objects.select_for_update().get(id=schedule.id)
     assert_expected_revision(schedule=schedule, expected_revision=expected_revision)
     if not schedule.blocks.exists():
         raise ScheduleNotPublishable(fields={"blocks": ["La programacion necesita al menos un bloque."]})
-    for block in schedule.blocks.select_related("playlist"):
+    for block in schedule.blocks.select_related("playlist", "channel"):
         if block.content_type == ScheduleBlock.ContentType.PLAYLIST and (
             not block.playlist_id
             or block.playlist.status != Playlist.Status.PUBLISHED
-            or not get_latest_published_snapshot(playlist=block.playlist)
+                or not get_latest_published_snapshot(playlist=block.playlist)
         ):
             raise ScheduleNotPublishable(fields={"blocks": ["Todos los bloques PLAYLIST necesitan una playlist publicada."]})
+        if block.content_type == ScheduleBlock.ContentType.CHANNEL and (
+            not block.channel_id
+            or block.channel.status != Channel.Status.PUBLISHED
+            or not get_latest_published_channel_snapshot(channel=block.channel)
+        ):
+            raise ScheduleNotPublishable(fields={"blocks": ["Todos los bloques CHANNEL necesitan un canal publicado."]})
     for block in schedule.blocks.all():
         validate_block_conflicts(block=block)
     for assignment in schedule.assignments.filter(is_active=True):
         validate_assignment_conflicts(assignment=assignment)
+    next_version = schedule.version + 1
+    snapshot_data = schedule_snapshot_payload(schedule=schedule, version=next_version)
+    checksum = schedule_snapshot_checksum(payload=snapshot_data)
     schedule.status = Schedule.Status.PUBLISHED
-    schedule.version += 1
+    schedule.version = next_version
     schedule.published_at = timezone.now()
-    return bump_revision(schedule=schedule, update_fields=["status", "version", "published_at"])
+    ScheduleSnapshot.objects.create(
+        schedule=schedule,
+        version=next_version,
+        checksum=checksum,
+        status=ScheduleSnapshot.Status.PUBLISHED,
+        timezone=schedule.timezone,
+        valid_from=schedule.valid_from,
+        valid_until=schedule.valid_until,
+        snapshot_data=snapshot_data,
+        published_by=published_by,
+        published_at=schedule.published_at,
+    )
+    schedule = bump_revision(schedule=schedule, update_fields=["status", "version", "published_at"])
+
+    from apps.playback.services import create_zone_operational_snapshot
+
+    zones = Zone.objects.filter(company=schedule.company).exclude(
+        status=Zone.Status.ARCHIVED
+    ).select_related("site", "company")
+    for zone in zones:
+        effective = resolve_effective_schedule_for_zone(zone=zone, at=timezone.now())
+        if effective.get("schedule") and effective["schedule"].id == schedule.id:
+            create_zone_operational_snapshot(zone=zone, reason="SCHEDULE_PUBLISHED")
+    return schedule
 
 
 @transaction.atomic

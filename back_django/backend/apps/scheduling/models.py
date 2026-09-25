@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from shared.db.models import TimeStampedUUIDModel, validate_date_range
+from shared.db.models import TimeStampedUUIDModel, UUIDModel, validate_date_range
 
 
 class Schedule(TimeStampedUUIDModel):
@@ -34,6 +34,34 @@ class Schedule(TimeStampedUUIDModel):
         super().clean()
         if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
             raise ValidationError({"valid_until": "Debe ser posterior o igual a valid_from."})
+
+
+class ScheduleSnapshot(UUIDModel):
+    class Status(models.TextChoices):
+        CREATED = "CREATED", "Created"
+        PUBLISHED = "PUBLISHED", "Published"
+        SUPERSEDED = "SUPERSEDED", "Superseded"
+
+    schedule = models.ForeignKey(Schedule, on_delete=models.PROTECT, related_name="snapshots")
+    version = models.PositiveIntegerField()
+    checksum = models.CharField(max_length=128)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CREATED, db_index=True)
+    timezone = models.CharField(max_length=64)
+    valid_from = models.DateField(null=True, blank=True)
+    valid_until = models.DateField(null=True, blank=True)
+    snapshot_data = models.JSONField(default=dict, blank=True)
+    published_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="published_schedule_snapshots")
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["schedule", "version"], name="uniq_schedule_snapshot_version"),
+        ]
+        indexes = [
+            models.Index(fields=["schedule", "status"]),
+            models.Index(fields=["created_at"]),
+        ]
 
 
 class ScheduleBlock(TimeStampedUUIDModel):

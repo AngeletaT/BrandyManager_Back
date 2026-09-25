@@ -5,6 +5,7 @@ from apps.scheduling import models
 
 for model in (
     models.Schedule,
+    models.ScheduleSnapshot,
     models.ScheduleBlock,
     models.ScheduleException,
     models.ScheduleAssignment,

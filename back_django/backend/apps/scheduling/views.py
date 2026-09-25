@@ -340,7 +340,11 @@ class SchedulePublishView(APIView):
         )
         serializer = ScheduleExpectedRevisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        schedule = publish_schedule(schedule=schedule, expected_revision=serializer.validated_data["expected_revision"])
+        schedule = publish_schedule(
+            schedule=schedule,
+            expected_revision=serializer.validated_data["expected_revision"],
+            published_by=request.user,
+        )
         return Response(ScheduleDetailSerializer(schedule, context={"membership": membership}).data)
 
 
@@ -447,4 +451,3 @@ class ScheduleResolveView(APIView):
                 },
             }
         )
-
